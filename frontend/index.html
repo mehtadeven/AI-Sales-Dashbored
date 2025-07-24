@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic AI Sales Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="shortcut icon" href="./img/favicon.png" type="image/x-icon">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F9FAFB;
+        }
+        #interactive-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        .chart-container {
+            position: relative;
+            height: 40vh;
+            width: 100%;
+        }
+        .kpi-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <canvas id="interactive-bg"></canvas>
+
+    <header class="bg-white/80 backdrop-blur-sm shadow-md sticky top-0 z-50">
+        <div class="container mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+            <h1 class="text-2xl font-bold text-gray-800">Dynamic Sales Dashboard</h1>
+            <div class="flex items-center gap-4">
+                <select id="file-selector" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                    <option selected disabled>Select a sales file</option>
+                </select>
+                <input type="file" id="file-upload" class="hidden" accept=".csv, .xlsx">
+                <button id="upload-btn" class="bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition duration-300 whitespace-nowrap">
+                    Upload New File
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-6 py-8">
+        <div id="dashboard-main" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md kpi-card">
+                    <h2 class="text-lg font-semibold text-gray-600">Total Revenue</h2>
+                    <p id="total-revenue" class="text-3xl font-bold mt-2">$0</p>
+                </div>
+                <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md kpi-card">
+                    <h2 class="text-lg font-semibold text-gray-600">Total Profit</h2>
+                    <p id="total-profit" class="text-3xl font-bold mt-2">$0</p>
+                </div>
+                <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md kpi-card">
+                    <h2 class="text-lg font-semibold text-gray-600">Profit Margin</h2>
+                    <p id="profit-margin" class="text-3xl font-bold mt-2">0%</p>
+                </div>
+                <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md kpi-card">
+                    <h2 class="text-lg font-semibold text-gray-600">MoM Growth</h2>
+                    <p id="mom-growth" class="text-3xl font-bold mt-2">0%</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4">Sales by Category</h2>
+                    <div class="chart-container">
+                        <canvas id="category-chart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4">Sales Trend</h2>
+                    <div class="chart-container">
+                        <canvas id="trend-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4">Most Profitable Products</h2>
+                    <div class="chart-container">
+                        <canvas id="profit-chart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4">Least Profitable Products</h2>
+                    <ul id="least-profitable-list" class="space-y-3 mt-4">
+                        <!-- Products will be listed here -->
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="bg-white/80 backdrop-blur-sm p-6 rounded-lg shadow-md">
+                 <h2 class="text-xl font-bold mb-4">AI-Powered Sales Suggestions</h2>
+                 <ul id="suggestions-list" class="list-disc list-inside space-y-2 text-gray-700">
+                    <li>Select a sales file to get suggestions.</li>
+                 </ul>
+            </div>
+        </div>
+        <div id="welcome-message" class="text-center py-16">
+            <h2 class="text-3xl font-bold text-gray-700">Welcome to your Sales Dashboard</h2>
+            <p class="text-lg text-gray-500 mt-2">Please upload a sales file or select an existing one to begin.</p>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const API_URL = 'http://127.0.0.1:5000/api';
+            let categoryChart, trendChart, profitChart;
+            let currentFile = null;
+
+            const uploadBtn = document.getElementById('upload-btn');
+            const fileUpload = document.getElementById('file-upload');
+            const fileSelector = document.getElementById('file-selector');
+            const dashboardMain = document.getElementById('dashboard-main');
+            const welcomeMessage = document.getElementById('welcome-message');
+
+            uploadBtn.addEventListener('click', () => fileUpload.click());
+            fileUpload.addEventListener('change', handleFileUpload);
+            fileSelector.addEventListener('change', (e) => loadDataForFile(e.target.value));
+
+            async function handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch(`${API_URL}/upload`, { method: 'POST', body: formData });
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
+                    }
+                    const data = await response.json();
+                    if (data.success) {
+                        alert(data.message);
+                        await loadAvailableFiles();
+                        fileSelector.value = file.name;
+                        loadDataForFile(file.name);
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
+                } catch (error) {
+                    console.error('Error uploading file:', error);
+                    displayConnectionError(error.message);
+                }
+            }
+
+            async function loadAvailableFiles() {
+                try {
+                    const response = await fetch(`${API_URL}/sales-files`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    const files = await response.json();
+                    fileSelector.innerHTML = '<option selected disabled>Select a sales file</option>';
+                    files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file;
+                        option.textContent = file;
+                        fileSelector.appendChild(option);
+                    });
+                } catch (error) {
+                    console.error('Error loading file list:', error);
+                    displayConnectionError();
+                }
+            }
+
+            function displayConnectionError(details = '') {
+                welcomeMessage.classList.remove('hidden');
+                dashboardMain.classList.add('hidden');
+                welcomeMessage.innerHTML = `
+                    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
+                        <h2 class="font-bold text-xl mb-2">Connection Error</h2>
+                        <p>Could not connect to the backend server. Please ensure the Python script (app.py) is running and that there are no CORS policy issues.</p>
+                        <p class="text-sm mt-2">Try refreshing the page after starting the server.</p>
+                        ${details ? `<p class="text-xs mt-2 bg-red-200 p-2 rounded">Details: ${details}</p>` : ''}
+                    </div>`;
+            }
+
+            function loadDataForFile(filename) {
+                if (!filename) return;
+                currentFile = filename;
+                dashboardMain.classList.remove('hidden');
+                welcomeMessage.classList.add('hidden');
+                
+                fetchDashboardData(filename);
+                fetchAdvancedAnalytics(filename);
+                fetchSalesSuggestions(filename);
+            }
+
+            async function fetchData(endpoint) {
+                try {
+                    const response = await fetch(endpoint);
+                    if (!response.ok) {
+                        throw new Error(`Network response was not ok for ${endpoint}`);
+                    }
+                    const data = await response.json();
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    return data;
+                } catch(error) {
+                    console.error(`Error fetching from ${endpoint}:`, error);
+                    displayConnectionError(error.message);
+                    return null;
+                }
+            }
+
+            async function fetchDashboardData(filename) {
+                const data = await fetchData(`${API_URL}/sales-data?file=${filename}`);
+                if (data) updateDashboardCharts(data);
+            }
+
+            async function fetchAdvancedAnalytics(filename) {
+                const data = await fetchData(`${API_URL}/advanced-analytics?file=${filename}`);
+                if (data) {
+                    updateKPIs(data);
+                    renderProfitabilityAnalysis(data);
+                }
+            }
+
+            async function fetchSalesSuggestions(filename) {
+                const data = await fetchData(`${API_URL}/sales-suggestions?file=${filename}`);
+                if (data) updateSuggestions(data.suggestions);
+            }
+            
+            function updateKPIs(analytics) {
+                document.getElementById('total-profit').textContent = `$${(analytics.total_profit || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}`;
+                document.getElementById('profit-margin').textContent = `${(analytics.average_profit_margin || 0).toFixed(2)}%`;
+                document.getElementById('mom-growth').textContent = `${(analytics.mom_revenue_growth || 0).toFixed(2)}%`;
+            }
+
+            function updateDashboardCharts(salesData) {
+                const totalRevenue = salesData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                document.getElementById('total-revenue').textContent = `$${totalRevenue.toLocaleString()}`;
+
+                const salesByCategory = salesData.reduce((acc, item) => {
+                    acc[item.category] = (acc[item.category] || 0) + (item.price * item.quantity);
+                    return acc;
+                }, {});
+                
+                renderCategoryChart(salesByCategory);
+                renderTrendChart(salesData);
+            }
+            
+            function updateSuggestions(suggestions) {
+                const suggestionsList = document.getElementById('suggestions-list');
+                suggestionsList.innerHTML = '';
+                if(suggestions && suggestions.length > 0){
+                    suggestions.forEach(suggestion => {
+                        const li = document.createElement('li');
+                        li.textContent = suggestion;
+                        suggestionsList.appendChild(li);
+                    });
+                } else {
+                    suggestionsList.innerHTML = '<li>No suggestions available.</li>';
+                }
+            }
+
+            function renderCategoryChart(salesByCategory) {
+                const ctx = document.getElementById('category-chart').getContext('2d');
+                if (categoryChart) categoryChart.destroy();
+                categoryChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(salesByCategory),
+                        datasets: [{ data: Object.values(salesByCategory), backgroundColor: ['#4F46E5', '#F59E0B', '#10B981', '#EF4444', '#3B82F6'], hoverOffset: 4 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } } }
+                });
+            }
+
+            function renderTrendChart(salesData) {
+                const salesByDate = salesData.reduce((acc, item) => {
+                    const date = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    acc[date] = (acc[date] || 0) + (item.price * item.quantity);
+                    return acc;
+                }, {});
+                
+                const sortedDates = Object.keys(salesByDate).sort((a,b) => new Date(a) - new Date(b));
+                const sortedSales = sortedDates.map(date => salesByDate[date]);
+
+                const ctx = document.getElementById('trend-chart').getContext('2d');
+                if (trendChart) trendChart.destroy();
+                trendChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: sortedDates,
+                        datasets: [{ label: 'Sales Revenue', data: sortedSales, borderColor: '#4F46E5', backgroundColor: 'rgba(79, 70, 229, 0.1)', fill: true, tension: 0.1 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                });
+            }
+            
+            function renderProfitabilityAnalysis(analytics) {
+                const { top_profitable_products, least_profitable_products } = analytics;
+
+                const profitCtx = document.getElementById('profit-chart').getContext('2d');
+                if (profitChart) profitChart.destroy();
+                if (top_profitable_products && top_profitable_products.length > 0) {
+                    profitChart = new Chart(profitCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: top_profitable_products.map(p => p.product),
+                            datasets: [{
+                                label: 'Total Profit',
+                                data: top_profitable_products.map(p => p.profit),
+                                backgroundColor: '#10B981',
+                                borderRadius: 4,
+                            }]
+                        },
+                        options: {
+                            indexAxis: 'y',
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: { x: { beginAtZero: true } }
+                        }
+                    });
+                }
+
+                const leastProfitableList = document.getElementById('least-profitable-list');
+                leastProfitableList.innerHTML = '';
+                if (least_profitable_products && least_profitable_products.length > 0) {
+                    least_profitable_products.forEach(p => {
+                        const li = document.createElement('li');
+                        li.className = 'flex justify-between items-center p-3 bg-gray-50 rounded-lg';
+                        li.innerHTML = `<span class="font-medium text-gray-700">${p.product}</span><span class="font-bold text-red-500">$${p.profit.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>`;
+                        leastProfitableList.appendChild(li);
+                    });
+                } else {
+                    leastProfitableList.innerHTML = '<li>No profitability data to display.</li>';
+                }
+            }
+
+            function initInteractiveBackground() {
+                const canvas = document.getElementById('interactive-bg');
+                const ctx = canvas.getContext('2d');
+                let particlesArray;
+
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+
+                const mouse = { x: null, y: null };
+                window.addEventListener('mousemove', (event) => { mouse.x = event.x; mouse.y = event.y; });
+                window.addEventListener('mouseout', () => { mouse.x = null; mouse.y = null; });
+
+                class Particle {
+                    constructor(x, y, directionX, directionY, size, color) {
+                        this.x = x; this.y = y; this.directionX = directionX; this.directionY = directionY; this.size = size; this.color = color;
+                    }
+                    draw() {
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2, false);
+                        ctx.fillStyle = this.color;
+                        ctx.fill();
+                    }
+                    update() {
+                        if (this.x > canvas.width || this.x < 0) { this.directionX = -this.directionX; }
+                        if (this.y > canvas.height || this.y < 0) { this.directionY = -this.directionY; }
+                        this.x += this.directionX;
+                        this.y += this.directionY;
+                        this.draw();
+                    }
+                }
+
+                function init() {
+                    particlesArray = [];
+                    let numberOfParticles = (canvas.height * canvas.width) / 9000;
+                    for (let i = 0; i < numberOfParticles; i++) {
+                        let size = (Math.random() * 2) + 1;
+                        let x = (Math.random() * ((innerWidth - size * 2) - (size * 2)) + size * 2);
+                        let y = (Math.random() * ((innerHeight - size * 2) - (size * 2)) + size * 2);
+                        let directionX = (Math.random() * .4) - .2;
+                        let directionY = (Math.random() * .4) - .2;
+                        let color = 'rgba(150, 150, 150, 0.5)';
+                        particlesArray.push(new Particle(x, y, directionX, directionY, size, color));
+                    }
+                }
+
+                function connect() {
+                    let opacityValue = 1;
+                    for (let a = 0; a < particlesArray.length; a++) {
+                        for (let b = a; b < particlesArray.length; b++) {
+                            let distance = ((particlesArray[a].x - particlesArray[b].x) * (particlesArray[a].x - particlesArray[b].x)) + ((particlesArray[a].y - particlesArray[b].y) * (particlesArray[a].y - particlesArray[b].y));
+                            if (distance < (canvas.width / 7) * (canvas.height / 7)) {
+                                opacityValue = 1 - (distance / 20000);
+                                ctx.strokeStyle = `rgba(140, 140, 140, ${opacityValue})`;
+                                ctx.lineWidth = 1;
+                                ctx.beginPath();
+                                ctx.moveTo(particlesArray[a].x, particlesArray[a].y);
+                                ctx.lineTo(particlesArray[b].x, particlesArray[b].y);
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                }
+
+                function animate() {
+                    requestAnimationFrame(animate);
+                    ctx.clearRect(0, 0, innerWidth, innerHeight);
+                    for (let i = 0; i < particlesArray.length; i++) {
+                        particlesArray[i].update();
+                    }
+                    connect();
+                }
+                
+                window.addEventListener('resize', () => {
+                    canvas.width = innerWidth;
+                    canvas.height = innerHeight;
+                    init();
+                });
+
+                init();
+                animate();
+            }
+
+            loadAvailableFiles();
+            initInteractiveBackground();
+        });
+    </script>
+</body>
+</html>
