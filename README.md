@@ -124,7 +124,7 @@ To run this project locally, you need to set up both the backend (Flask server) 
     Open your web browser and navigate to the address provided by the Flask server, which is usually:
 
     ```
-    [http://127.0.0.1:5000/](http://127.0.0.1:5000/)
+    http://127.0.0.1:5000/
     ```
 
     or
