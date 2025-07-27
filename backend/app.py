@@ -90,7 +90,7 @@ def get_sales_suggestions():
     if df is None or 'cost' not in df.columns:
         return jsonify({"suggestions": ["Selected file must contain a 'cost' column for AI-powered suggestions."]})
 
-    api_key = os.getenv("API_KEY", "AIzaSyAOfe_P7HQs8jdh4Kjn_Dukr6cKE1GS4ds")
+    api_key = os.getenv("API_KEY", "Place Your API KEY ")
     if not api_key:
         return jsonify({"suggestions": ["API_KEY environment variable not set. Could not generate AI suggestions."]})
 
